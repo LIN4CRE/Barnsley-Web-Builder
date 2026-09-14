@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+
+    <!-- Primary metadata -->
+    <title>Barnsley Offline Business Directory — Established Barnsley Firms Without Websites</title>
+    <meta
+      name="description"
+      content="A working directory of established, highly-rated Barnsley and South Yorkshire businesses that trade without a website. Filter by suburb, sector and reputation, then generate outreach notes, proposals and website briefs."
+    />
+    <meta name="author" content="Barnsley Web Builder" />
+    <meta name="application-name" content="Barnsley Offline Business Directory" />
+
+    <!-- PROJECT-SPECIFIC: replace with the live deployment origin. -->
+    <link rel="canonical" href="https://lin4cre.github.io/Barnsley-Web-Builder/" />
+
+    <!-- Crawling / indexing -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="googlebot" content="index, follow" />
+
+    <!-- Browser / PWA -->
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Barnsley Offline Business Directory" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:title" content="Barnsley Offline Business Directory" />
+    <meta
+      property="og:description"
+      content="Established, highly-rated Barnsley businesses trading without a website — searchable by suburb, sector and reputation, with outreach and website-brief tooling."
+    />
+    <meta property="og:url" content="https://lin4cre.github.io/Barnsley-Web-Builder/" />
+    <meta property="og:image" content="https://lin4cre.github.io/Barnsley-Web-Builder/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="Barnsley Offline Business Directory — Barnsley and South Yorkshire businesses trading without a website." />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Barnsley Offline Business Directory" />
+    <meta
+      name="twitter:description"
+      content="Established, highly-rated Barnsley businesses trading without a website — searchable by suburb, sector and reputation."
+    />
+    <meta name="twitter:image" content="https://lin4cre.github.io/Barnsley-Web-Builder/og-image.png" />
+    <meta name="twitter:image:alt" content="Barnsley Offline Business Directory" />
+
+    <!--
+      Fonts are self-hosted (latin subset, variable, ~58 KB total) and loaded via
+      @font-face in src/index.css so Vite can hash and fingerprint them correctly
+      under any `base` path. No third-party font requests are made.
+    -->
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://lin4cre.github.io/Barnsley-Web-Builder/#app",
+            "name": "Barnsley Offline Business Directory",
+            "url": "https://lin4cre.github.io/Barnsley-Web-Builder/",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "Lead generation and prospecting tool",
+            "operatingSystem": "Any modern web browser",
+            "browserRequirements": "Requires JavaScript. Works in current versions of Chrome, Edge, Firefox and Safari.",
+            "isAccessibleForFree": true,
+            "inLanguage": "en-GB",
+            "description": "A working directory of established, highly-rated Barnsley and South Yorkshire businesses that trade without a website. Filter by suburb, sector and reputation, track outreach status, and generate proposals and website briefs.",
+            "featureList": [
+              "Searchable directory of Barnsley businesses without websites",
+              "Filtering by suburb, sector, reputation and outreach stage",
+              "Outreach pipeline tracking with private notes",
+              "CSV export of prospect lists",
+              "AI-assisted pitch, research and website brief generation"
+            ],
+            "areaServed": {
+              "@type": "AdministrativeArea",
+              "name": "Barnsley, South Yorkshire, England"
+            },
+            "publisher": { "@id": "https://lin4cre.github.io/Barnsley-Web-Builder/#org" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://lin4cre.github.io/Barnsley-Web-Builder/#org",
+            "name": "Barnsley Web Builder",
+            "url": "https://lin4cre.github.io/Barnsley-Web-Builder/",
+            "areaServed": {
+              "@type": "AdministrativeArea",
+              "name": "Barnsley, South Yorkshire, England"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://lin4cre.github.io/Barnsley-Web-Builder/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is the Barnsley Offline Business Directory?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "It is a working prospecting tool that lists established, well-reviewed businesses in Barnsley and South Yorkshire which trade without their own website. Each entry records the business's sector, suburb, contact details, reputation signals and a suggested web opportunity, so outreach can be planned and tracked in one place."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Where does the business data come from?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Directory entries are compiled from publicly observable information such as public business listings, customer reviews and company details. Ratings and review counts are a snapshot taken when each entry was added and can change. Entries are working research notes, not a verified commercial database, and should be re-checked before you rely on them."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is the directory free to use?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. The directory, filtering, outreach tracking and CSV export are free to use in the browser. AI-assisted features need a Google Gemini API key, which you supply yourself."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Where is my outreach data stored?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Outreach status and private notes are stored in your own browser's local storage on your device. They are not uploaded to a server or shared with anyone. Clearing your browser data will remove them, so use the CSV export to keep a backup."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <script type="module" crossorigin src="/Barnsley-Web-Builder/assets/index-CGOHAM4i.js"></script>
+    <link rel="modulepreload" crossorigin href="/Barnsley-Web-Builder/assets/react-DNSylmp4.js">
+    <link rel="modulepreload" crossorigin href="/Barnsley-Web-Builder/assets/icons-DLB4ulan.js">
+    <link rel="stylesheet" crossorigin href="/Barnsley-Web-Builder/assets/index-CdfFelTA.css">
+  </head>
+
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-lg focus:bg-slate-900 focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
+    >
+      Skip to main content
+    </a>
+
+    <div id="root"></div>
+
+    <noscript>
+      <div style="max-width: 42rem; margin: 4rem auto; padding: 0 1.25rem; font-family: system-ui, sans-serif; line-height: 1.6">
+        <h1 style="font-size: 1.5rem">Barnsley Offline Business Directory</h1>
+        <p>
+          This directory is an interactive tool and needs JavaScript enabled to search, filter and
+          export the prospect list.
+        </p>
+        <p>
+          If you cannot enable JavaScript, the underlying business list is available in the project
+          repository at
+          <a href="https://github.com/LIN4CRE/Barnsley-Web-Builder">github.com/LIN4CRE/Barnsley-Web-Builder</a>,
+          in <code>src/data/businesses.ts</code>.
+        </p>
+      </div>
+    </noscript>
+
+  </body>
+</html>

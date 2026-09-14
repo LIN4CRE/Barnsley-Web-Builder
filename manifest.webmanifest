@@ -1,0 +1,23 @@
+{
+  "name": "Barnsley Offline Business Directory",
+  "short_name": "Barnsley Directory",
+  "description": "A working directory of established Barnsley businesses that trade without a website.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0F172A",
+  "lang": "en-GB",
+  "icons": [
+    {
+      "src": "./icons/favicon-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
