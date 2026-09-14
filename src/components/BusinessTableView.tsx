@@ -5,11 +5,13 @@ import { BusinessItem } from '../types';
 interface BusinessTableViewProps {
   businesses: BusinessItem[];
   onGeneratePitch: (business: BusinessItem) => void;
+  onDeepResearch: (business: BusinessItem) => void;
 }
 
 export const BusinessTableView: React.FC<BusinessTableViewProps> = ({
   businesses,
   onGeneratePitch,
+  onDeepResearch,
 }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs mb-8">
@@ -31,7 +33,14 @@ export const BusinessTableView: React.FC<BusinessTableViewProps> = ({
             {businesses.map((b) => (
               <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-3.5 px-4">
-                  <div className="font-bold text-slate-900 text-sm">{b.name}</div>
+                  <button
+                    onClick={() => onDeepResearch(b)}
+                    className="text-left font-bold text-slate-900 text-sm hover:text-indigo-600 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Click to automatically research everything about this business"
+                  >
+                    <span>{b.name}</span>
+                    <Sparkles className="w-3 h-3 text-amber-500" />
+                  </button>
                   <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                     <span>{b.category}</span>
                     <span>•</span>
@@ -85,11 +94,20 @@ export const BusinessTableView: React.FC<BusinessTableViewProps> = ({
                 <td className="py-3.5 px-4 text-right whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1.5">
                     <button
-                      onClick={() => onGeneratePitch(b)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-900 text-white hover:bg-slate-800 cursor-pointer shadow-2xs"
+                      id={`btn-table-research-${b.id}`}
+                      onClick={() => onDeepResearch(b)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-2xs"
+                      title="Automatically research everything and generate prompt"
                     >
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>Pitch</span>
+                      <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span>Research & Prompt</span>
+                    </button>
+                    <button
+                      onClick={() => onGeneratePitch(b)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                      title="Outreach pitch"
+                    >
+                      <span>Script</span>
                     </button>
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(

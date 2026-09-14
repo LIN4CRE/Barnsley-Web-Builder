@@ -18,12 +18,14 @@ import { BusinessItem } from '../types';
 interface BusinessCardProps {
   business: BusinessItem;
   onGeneratePitch: (business: BusinessItem) => void;
+  onDeepResearch: (business: BusinessItem) => void;
   isGeneratingPitch: boolean;
 }
 
 export const BusinessCard: React.FC<BusinessCardProps> = ({
   business,
   onGeneratePitch,
+  onDeepResearch,
   isGeneratingPitch,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -83,13 +85,24 @@ Opportunity Angle: ${business.opportunityAngle}`;
               )}
             </div>
 
-            <h3 className="text-lg font-bold text-slate-900 tracking-tight font-display">
-              {business.name}
-            </h3>
+            <button
+              onClick={() => onDeepResearch(business)}
+              className="text-left group cursor-pointer"
+              title="Click to automatically research everything about this business"
+            >
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight font-display group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                <span>{business.name}</span>
+                <Sparkles className="w-4 h-4 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </h3>
+            </button>
           </div>
 
-          {/* Opportunity score badge */}
-          <div className="text-right shrink-0 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+          {/* Opportunity score badge (also clickable to research) */}
+          <button
+            onClick={() => onDeepResearch(business)}
+            className="text-right shrink-0 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors"
+            title="Click to research and generate website prompt"
+          >
             <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-600">
               Web Opportunity
             </div>
@@ -98,7 +111,7 @@ Opportunity Angle: ${business.opportunityAngle}`;
               <span>{business.opportunityScore}</span>
               <span className="text-slate-600 text-xs font-normal">/100</span>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Location & Rating row */}
@@ -207,15 +220,27 @@ Opportunity Angle: ${business.opportunityAngle}`;
           </a>
         </div>
 
-        <button
-          id={`btn-pitch-${business.id}`}
-          onClick={() => onGeneratePitch(business)}
-          disabled={isGeneratingPitch}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>Generate Pitch & Script</span>
-        </button>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            id={`btn-research-${business.id}`}
+            onClick={() => onDeepResearch(business)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-2xs"
+            title="Automatically research everything about this business and generate a master website prompt"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Research & Prompt</span>
+          </button>
+
+          <button
+            id={`btn-pitch-${business.id}`}
+            onClick={() => onGeneratePitch(business)}
+            disabled={isGeneratingPitch}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            title="Generate sales outreach pitch and phone script"
+          >
+            <span>Outreach Script</span>
+          </button>
+        </div>
       </div>
     </div>
   );

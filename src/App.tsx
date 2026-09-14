@@ -12,6 +12,7 @@ import { BusinessTableView } from './components/BusinessTableView';
 import { PitchModal } from './components/PitchModal';
 import { AiScannerModal } from './components/AiScannerModal';
 import { AddBusinessModal } from './components/AddBusinessModal';
+import { DeepResearchModal } from './components/DeepResearchModal';
 import { BARNSLEY_BUSINESSES } from './data/businesses';
 import { BusinessCategory, BusinessItem, FilterOptions, PitchProposal } from './types';
 import {
@@ -47,6 +48,15 @@ export default function App() {
   const [activeBusinessForPitch, setActiveBusinessForPitch] = useState<BusinessItem | null>(null);
   const [currentPitch, setCurrentPitch] = useState<PitchProposal | null>(null);
   const [isPitchLoading, setIsPitchLoading] = useState(false);
+
+  // Deep Research & Website Prompt Modal state
+  const [activeBusinessForResearch, setActiveBusinessForResearch] = useState<BusinessItem | null>(null);
+  const [isResearchModalOpen, setIsResearchModalOpen] = useState(false);
+
+  const handleOpenDeepResearch = (business: BusinessItem) => {
+    setActiveBusinessForResearch(business);
+    setIsResearchModalOpen(true);
+  };
 
   // Fetch initial businesses from server if reachable
   useEffect(() => {
@@ -376,6 +386,7 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
               <BusinessCard
                 key={business.id}
                 business={business}
+                onDeepResearch={handleOpenDeepResearch}
                 onGeneratePitch={(b) => handleOpenPitch(b)}
                 isGeneratingPitch={isPitchLoading && activeBusinessForPitch?.id === business.id}
               />
@@ -384,6 +395,7 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         ) : (
           <BusinessTableView
             businesses={filteredBusinesses}
+            onDeepResearch={handleOpenDeepResearch}
             onGeneratePitch={(b) => handleOpenPitch(b)}
           />
         )}
@@ -442,6 +454,16 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         onClose={() => setIsAddModalOpen(false)}
         onAdd={(b) => handleAddBusinesses([b])}
         categories={categories as BusinessCategory[]}
+      />
+
+      {/* Deep Research & Autonomous Website Prompt Modal */}
+      <DeepResearchModal
+        business={activeBusinessForResearch}
+        isOpen={isResearchModalOpen}
+        onClose={() => {
+          setIsResearchModalOpen(false);
+          setActiveBusinessForResearch(null);
+        }}
       />
     </div>
   );
