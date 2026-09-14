@@ -13,6 +13,12 @@ export type OnlinePresenceType =
   | 'Market Counter & Footfall'
   | 'Directory Profile Only';
 
+export type OutreachStatus =
+  | 'Not Contacted'
+  | 'In Progress'
+  | 'Lead'
+  | 'Closed';
+
 export interface BusinessItem {
   id: string;
   name: string;
@@ -35,6 +41,8 @@ export interface BusinessItem {
   opportunityScore: number; // 1 - 100
   recommendedPackage: string;
   estimatedLostRevenuePerMonth?: string;
+  status?: OutreachStatus;
+  notes?: string;
 }
 
 export interface PitchProposal {
@@ -56,6 +64,7 @@ export interface FilterOptions {
   minRating: number;
   minOpportunityScore: number;
   onlinePresence: string;
+  outreachStatus?: string;
   sortBy: 'score_desc' | 'rating_desc' | 'reviews_desc' | 'name_asc';
 }
 

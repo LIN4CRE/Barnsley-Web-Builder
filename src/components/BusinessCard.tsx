@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MapPin,
   Phone,
@@ -11,12 +11,21 @@ import {
   Check,
   TrendingUp,
   Globe,
-  Share2
+  Share2,
+  FileText,
+  StickyNote,
+  ChevronDown,
+  Trash2,
+  Save,
 } from 'lucide-react';
-import { BusinessItem } from '../types';
+import { BusinessItem, OutreachStatus } from '../types';
 
 interface BusinessCardProps {
   business: BusinessItem;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  onStatusChange?: (id: string, status: OutreachStatus) => void;
+  onNoteSave?: (id: string, note: string) => void;
   onGeneratePitch: (business: BusinessItem) => void;
   onDeepResearch: (business: BusinessItem) => void;
   isGeneratingPitch: boolean;
@@ -24,11 +33,58 @@ interface BusinessCardProps {
 
 export const BusinessCard: React.FC<BusinessCardProps> = ({
   business,
+  isSelected = false,
+  onToggleSelect,
+  onStatusChange,
+  onNoteSave,
   onGeneratePitch,
   onDeepResearch,
   isGeneratingPitch,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [noteText, setNoteText] = useState(business.notes || '');
+  const [noteSavedFeedback, setNoteSavedFeedback] = useState(false);
+
+  // Sync note from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`barnsley_notes_${business.id}`);
+      if (stored !== null) {
+        setNoteText(stored);
+      } else if (business.notes) {
+        setNoteText(business.notes);
+      }
+    } catch {
+      // ignore
+    }
+  }, [business.id, business.notes]);
+
+  const handleSaveNote = (text: string) => {
+    setNoteText(text);
+    try {
+      localStorage.setItem(`barnsley_notes_${business.id}`, text);
+      if (onNoteSave) {
+        onNoteSave(business.id, text);
+      }
+      setNoteSavedFeedback(true);
+      setTimeout(() => setNoteSavedFeedback(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleClearNote = () => {
+    setNoteText('');
+    try {
+      localStorage.removeItem(`barnsley_notes_${business.id}`);
+      if (onNoteSave) {
+        onNoteSave(business.id, '');
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const handleCopyLead = () => {
     const text = `Business: ${business.name}
@@ -36,7 +92,9 @@ Phone: ${business.phone}
 Address: ${business.fullAddress}, ${business.postcode}
 Category: ${business.category}
 Rating: ${business.rating}★ (${business.reviewsCount} reviews)
-Opportunity Angle: ${business.opportunityAngle}`;
+Outreach Status: ${business.status || 'Not Contacted'}
+Opportunity Angle: ${business.opportunityAngle}
+${noteText ? `Private Notes: ${noteText}` : ''}`;
 
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -58,12 +116,64 @@ Opportunity Angle: ${business.opportunityAngle}`;
     }
   };
 
+  const currentOutreachStatus: OutreachStatus = business.status || 'Not Contacted';
+
+  const getOutreachStatusBadge = (status: OutreachStatus) => {
+    switch (status) {
+      case 'Closed':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
+      case 'Lead':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-300 font-bold';
+      case 'In Progress':
+        return 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
+      case 'Not Contacted':
+      default:
+        return 'bg-slate-100 text-slate-600 border-slate-300 font-medium';
+    }
+  };
+
   return (
     <div
       id={`business-card-${business.id}`}
-      className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between"
+      className={`bg-white rounded-xl border transition-all p-5 shadow-2xs hover:shadow-xs flex flex-col justify-between ${
+        isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/10' : 'border-slate-200'
+      }`}
     >
       <div>
+        {/* Top Selection & Outreach Status row */}
+        <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            {onToggleSelect && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggleSelect(business.id)}
+                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-[11px] font-medium text-slate-600">Select</span>
+              </label>
+            )}
+          </div>
+
+          {/* Outreach Status Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase font-semibold text-slate-400">Status:</span>
+            <select
+              value={currentOutreachStatus}
+              onChange={(e) => onStatusChange && onStatusChange(business.id, e.target.value as OutreachStatus)}
+              className={`text-xs px-2 py-0.5 rounded-md border cursor-pointer focus:outline-none transition-colors ${getOutreachStatusBadge(
+                currentOutreachStatus
+              )}`}
+            >
+              <option value="Not Contacted">Not Contacted</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Lead">Lead</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+        </div>
+
         {/* Top Header info */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -139,49 +249,119 @@ Opportunity Angle: ${business.opportunityAngle}`;
           {business.fullAddress}
         </div>
 
-        {/* Primary services badges */}
+        {/* Services Badges */}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {business.primaryServices.slice(0, 4).map((service, idx) => (
             <span
               key={idx}
-              className="text-[11px] font-medium bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200"
+              className="text-[11px] bg-slate-50 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200"
             >
               {service}
             </span>
           ))}
           {business.primaryServices.length > 4 && (
-            <span className="text-[11px] font-medium text-slate-600 px-1 py-0.5">
+            <span className="text-[11px] text-slate-500 px-1 py-0.5">
               +{business.primaryServices.length - 4} more
             </span>
           )}
         </div>
 
-        {/* Success Proof Box */}
-        <div className="mt-4 p-3 bg-emerald-50/70 border border-emerald-100 rounded-lg text-xs">
-          <div className="flex items-start gap-1.5 text-emerald-900">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="font-semibold text-emerald-950">Proven Local Success: </strong>
-              <span className="text-emerald-900/90 leading-relaxed">{business.successProof}</span>
-            </div>
+        {/* Proof of Success */}
+        <div className="mt-3 bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs">
+          <div className="font-semibold text-slate-900 flex items-center gap-1.5 mb-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>Success & Standing in Barnsley:</span>
           </div>
+          <p className="text-slate-600 leading-relaxed text-[11px]">
+            {business.successProof}
+          </p>
         </div>
 
-        {/* Why No Website & Missed Angle */}
-        <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
-          <div className="text-slate-600">
-            <strong className="text-slate-700 font-semibold">Why No Website: </strong>
-            <span>{business.whyNoWebsite}</span>
+        {/* The Pitch Opportunity Angle */}
+        <div className="mt-2.5 bg-amber-50/60 rounded-lg p-3 border border-amber-200 text-xs">
+          <div className="font-semibold text-amber-950 flex items-center gap-1.5 mb-1">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span>Web Value Opportunity:</span>
           </div>
-
-          <div className="text-slate-700 pt-1.5 border-t border-slate-200">
-            <strong className="text-slate-900 font-semibold">Website Opportunity Angle: </strong>
-            <span className="text-slate-700 font-medium leading-relaxed">{business.opportunityAngle}</span>
-          </div>
-
+          <p className="text-amber-900 leading-relaxed text-[11px]">
+            {business.opportunityAngle}
+          </p>
           {business.estimatedLostRevenuePerMonth && (
             <div className="text-[11px] text-amber-800 font-medium pt-0.5">
               Estimated Missed Opportunity: {business.estimatedLostRevenuePerMonth}
+            </div>
+          )}
+        </div>
+
+        {/* Notes Feature Toggle and Drawer */}
+        <div className="mt-3">
+          <button
+            onClick={() => setShowNotes(!showNotes)}
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer transition-colors"
+          >
+            <StickyNote className={`w-3.5 h-3.5 ${noteText ? 'text-amber-500 fill-amber-400' : 'text-slate-400'}`} />
+            <span>{showNotes ? 'Hide Private Notes' : noteText ? 'View Private Note' : 'Add Private Note'}</span>
+            {noteText && !showNotes && (
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            )}
+          </button>
+
+          {showNotes && (
+            <div className="mt-2 p-3 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                  <StickyNote className="w-3 h-3 text-amber-600" />
+                  <span>Private Outreach Notes (Saved Locally)</span>
+                </span>
+                {noteSavedFeedback && (
+                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 animate-pulse">
+                    <Check className="w-3 h-3" /> Saved
+                  </span>
+                )}
+              </div>
+
+              <textarea
+                value={noteText}
+                onChange={(e) => handleSaveNote(e.target.value)}
+                placeholder="Log notes: e.g. Called owner on Monday, asked for John, wants price estimate for 24/7 booking..."
+                rows={3}
+                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none font-sans"
+              />
+
+              {/* Quick suggestion tags */}
+              <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    onClick={() => handleSaveNote(noteText ? `${noteText} • Called owner` : 'Called owner')}
+                    className="px-1.5 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                  >
+                    + Called owner
+                  </button>
+                  <button
+                    onClick={() => handleSaveNote(noteText ? `${noteText} • Left voicemail` : 'Left voicemail')}
+                    className="px-1.5 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                  >
+                    + Left voicemail
+                  </button>
+                  <button
+                    onClick={() => handleSaveNote(noteText ? `${noteText} • Callback scheduled` : 'Callback scheduled')}
+                    className="px-1.5 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 cursor-pointer"
+                  >
+                    + Callback
+                  </button>
+                </div>
+
+                {noteText && (
+                  <button
+                    onClick={handleClearNote}
+                    className="text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                    title="Delete note"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -201,8 +381,8 @@ Opportunity Angle: ${business.opportunityAngle}`;
 
           <button
             onClick={handleCopyLead}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors"
-            title="Copy business contact details"
+            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+            title="Copy business contact details & notes"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
           </button>

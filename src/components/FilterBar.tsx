@@ -28,6 +28,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.category !== 'All' ||
     filters.area !== 'All' ||
     filters.onlinePresence !== 'All' ||
+    (filters.outreachStatus && filters.outreachStatus !== 'All') ||
     filters.minRating > 0;
 
   return (
@@ -147,6 +148,24 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <option value="Phone & Word-of-Mouth">Phone & Word-of-Mouth</option>
             <option value="Market Counter & Footfall">Market Counter & Footfall</option>
             <option value="Directory Profile Only">Directory Profile Only</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="filter-outreach-select" className="text-slate-500 font-medium">
+            Outreach Status:
+          </label>
+          <select
+            id="filter-outreach-select"
+            value={filters.outreachStatus || 'All'}
+            onChange={(e) => onChange({ outreachStatus: e.target.value })}
+            className="py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+          >
+            <option value="All">All Stages</option>
+            <option value="Not Contacted">Not Contacted</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Lead">Lead</option>
+            <option value="Closed">Closed</option>
           </select>
         </div>
 

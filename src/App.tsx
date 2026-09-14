@@ -13,8 +13,11 @@ import { PitchModal } from './components/PitchModal';
 import { AiScannerModal } from './components/AiScannerModal';
 import { AddBusinessModal } from './components/AddBusinessModal';
 import { DeepResearchModal } from './components/DeepResearchModal';
+import { MarketAnalyticsCharts } from './components/MarketAnalyticsCharts';
+import { BulkActionsToolbar } from './components/BulkActionsToolbar';
+import { BulkPitchModal } from './components/BulkPitchModal';
 import { BARNSLEY_BUSINESSES } from './data/businesses';
-import { BusinessCategory, BusinessItem, FilterOptions, PitchProposal } from './types';
+import { BusinessCategory, BusinessItem, FilterOptions, PitchProposal, OutreachStatus } from './types';
 import {
   Building,
   Sparkles,
@@ -27,8 +30,32 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
+const loadStoredStatuses = (): Record<string, OutreachStatus> => {
+  try {
+    const raw = localStorage.getItem('barnsley_business_statuses');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const loadStoredNotes = (id: string): string => {
+  try {
+    return localStorage.getItem(`barnsley_notes_${id}`) || '';
+  } catch {
+    return '';
+  }
+};
+
 export default function App() {
-  const [businesses, setBusinesses] = useState<BusinessItem[]>(BARNSLEY_BUSINESSES);
+  const [businesses, setBusinesses] = useState<BusinessItem[]>(() => {
+    const stored = loadStoredStatuses();
+    return BARNSLEY_BUSINESSES.map((b) => ({
+      ...b,
+      status: stored[b.id] || b.status || 'Not Contacted',
+      notes: loadStoredNotes(b.id) || b.notes || '',
+    }));
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Filter state
@@ -39,8 +66,13 @@ export default function App() {
     minRating: 0,
     minOpportunityScore: 0,
     onlinePresence: 'All',
+    outreachStatus: 'All',
     sortBy: 'score_desc',
   });
+
+  // Bulk Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkPitchOpen, setIsBulkPitchOpen] = useState(false);
 
   // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -64,13 +96,71 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setBusinesses(data.data);
+          const stored = loadStoredStatuses();
+          setBusinesses(
+            data.data.map((b: BusinessItem) => ({
+              ...b,
+              status: stored[b.id] || b.status || 'Not Contacted',
+              notes: loadStoredNotes(b.id) || b.notes || '',
+            }))
+          );
         }
       })
       .catch(() => {
         // Fallback to static verified BARNSLEY_BUSINESSES
       });
   }, []);
+
+  // Selection handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(filteredBusinesses.map((b) => b.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  // Outreach Status Handlers
+  const handleStatusChange = (id: string, newStatus: OutreachStatus) => {
+    setBusinesses((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b))
+    );
+    try {
+      const stored = loadStoredStatuses();
+      stored[id] = newStatus;
+      localStorage.setItem('barnsley_business_statuses', JSON.stringify(stored));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleBulkStatusChange = (newStatus: OutreachStatus) => {
+    if (selectedIds.length === 0) return;
+    setBusinesses((prev) =>
+      prev.map((b) => (selectedIds.includes(b.id) ? { ...b, status: newStatus } : b))
+    );
+    try {
+      const stored = loadStoredStatuses();
+      selectedIds.forEach((id) => {
+        stored[id] = newStatus;
+      });
+      localStorage.setItem('barnsley_business_statuses', JSON.stringify(stored));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleNoteSave = (id: string, note: string) => {
+    setBusinesses((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, notes: note } : b))
+    );
+  };
 
   // Unique categories and areas for filters
   const categories = useMemo(() => {
@@ -117,6 +207,13 @@ export default function App() {
     // Online presence type
     if (filters.onlinePresence !== 'All') {
       result = result.filter((b) => b.onlinePresence === filters.onlinePresence);
+    }
+
+    // Outreach Status filter
+    if (filters.outreachStatus && filters.outreachStatus !== 'All') {
+      result = result.filter(
+        (b) => (b.status || 'Not Contacted') === filters.outreachStatus
+      );
     }
 
     // Rating
@@ -225,11 +322,17 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
     }
   };
 
-  // Export CSV functionality
-  const handleExportCsv = () => {
+  // Export CSV functionality (supports all filtered or only selected)
+  const handleExportCsv = (onlySelected = false) => {
+    const targetList =
+      onlySelected && selectedIds.length > 0
+        ? businesses.filter((b) => selectedIds.includes(b.id))
+        : filteredBusinesses;
+
     const headers = [
       'Business Name',
       'Sector',
+      'Outreach Status',
       'Area',
       'Full Address',
       'Postcode',
@@ -241,14 +344,16 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
       'Opportunity Score (1-100)',
       'Recommended Web Package',
       'Estimated Missed Monthly Revenue',
+      'Private Notes',
       'Proof of Success',
       'Why No Website',
       'Pitch Opportunity Angle',
     ];
 
-    const rows = filteredBusinesses.map((b) => [
+    const rows = targetList.map((b) => [
       `"${b.name.replace(/"/g, '""')}"`,
       `"${b.category}"`,
+      `"${b.status || 'Not Contacted'}"`,
       `"${b.area}"`,
       `"${b.fullAddress.replace(/"/g, '""')}"`,
       `"${b.postcode}"`,
@@ -260,16 +365,22 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
       b.opportunityScore,
       `"${b.recommendedPackage.replace(/"/g, '""')}"`,
       `"${(b.estimatedLostRevenuePerMonth || '').replace(/"/g, '""')}"`,
+      `"${(b.notes || loadStoredNotes(b.id)).replace(/"/g, '""')}"`,
       `"${b.successProof.replace(/"/g, '""')}"`,
       `"${b.whyNoWebsite.replace(/"/g, '""')}"`,
       `"${b.opportunityAngle.replace(/"/g, '""')}"`,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Barnsley_Offline_Businesses_Prospects_${new Date().toISOString().slice(0, 10)}.csv`);
+    const filename = onlySelected
+      ? `Barnsley_Selected_${targetList.length}_Businesses_${new Date().toISOString().slice(0, 10)}.csv`
+      : `Barnsley_Offline_Businesses_Prospects_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -283,14 +394,18 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
     });
   };
 
+  const selectedBusinessesList = useMemo(() => {
+    return businesses.filter((b) => selectedIds.includes(b.id));
+  }, [businesses, selectedIds]);
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-20">
       {/* Top Header */}
       <Header
         totalCount={businesses.length}
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenAddModal={() => setIsAddModalOpen(true)}
-        onExportCsv={handleExportCsv}
+        onExportCsv={() => handleExportCsv(false)}
       />
 
       {/* Main Container */}
@@ -329,6 +444,9 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         {/* Metrics Overview */}
         <MetricsBar businesses={businesses} />
 
+        {/* Recharts Market Potential Analytics & Pipeline Visualizer */}
+        <MarketAnalyticsCharts businesses={businesses} />
+
         {/* Filters and search */}
         <FilterBar
           filters={filters}
@@ -341,6 +459,7 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
               minRating: 0,
               minOpportunityScore: 0,
               onlinePresence: 'All',
+              outreachStatus: 'All',
               sortBy: 'score_desc',
             })
           }
@@ -372,6 +491,7 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
                   minRating: 0,
                   minOpportunityScore: 0,
                   onlinePresence: 'All',
+                  outreachStatus: 'All',
                   sortBy: 'score_desc',
                 })
               }
@@ -386,6 +506,10 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
               <BusinessCard
                 key={business.id}
                 business={business}
+                isSelected={selectedIds.includes(business.id)}
+                onToggleSelect={handleToggleSelect}
+                onStatusChange={handleStatusChange}
+                onNoteSave={handleNoteSave}
                 onDeepResearch={handleOpenDeepResearch}
                 onGeneratePitch={(b) => handleOpenPitch(b)}
                 isGeneratingPitch={isPitchLoading && activeBusinessForPitch?.id === business.id}
@@ -395,11 +519,26 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         ) : (
           <BusinessTableView
             businesses={filteredBusinesses}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
+            onStatusChange={handleStatusChange}
             onDeepResearch={handleOpenDeepResearch}
             onGeneratePitch={(b) => handleOpenPitch(b)}
           />
         )}
       </main>
+
+      {/* Floating Bulk Actions Toolbar */}
+      <BulkActionsToolbar
+        selectedCount={selectedIds.length}
+        totalCount={filteredBusinesses.length}
+        onSelectAll={handleSelectAll}
+        onClearSelection={handleClearSelection}
+        onExportSelectedCsv={() => handleExportCsv(true)}
+        onOpenBulkPitch={() => setIsBulkPitchOpen(true)}
+        onBulkStatusChange={handleBulkStatusChange}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-auto">
@@ -418,10 +557,10 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
             </button>
             <span>•</span>
             <button
-              onClick={handleExportCsv}
+              onClick={() => handleExportCsv(false)}
               className="text-slate-700 hover:text-slate-900 font-medium cursor-pointer"
             >
-              Export CSV
+              Export All CSV
             </button>
           </div>
         </div>
@@ -464,6 +603,13 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
           setIsResearchModalOpen(false);
           setActiveBusinessForResearch(null);
         }}
+      />
+
+      {/* Bulk Pitch Generation Modal */}
+      <BulkPitchModal
+        businesses={selectedBusinessesList}
+        isOpen={isBulkPitchOpen}
+        onClose={() => setIsBulkPitchOpen(false)}
       />
     </div>
   );
