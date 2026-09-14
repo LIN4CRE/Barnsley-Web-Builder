@@ -8,15 +8,37 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     versioning-strategy: increase
+    labels:
+      - dependencies
+
+    # Major-version bumps are deliberately NOT opened automatically.
+    #
+    # A semver-major bump (vite 6 -> 8, eslint 9 -> 10, lucide-react 0.x -> 1.x)
+    # is a migration, not an upgrade: it typically changes APIs and breaks the
+    # build. Auto-opening them fills the queue with red PRs and hides the
+    # patch/minor updates that are genuinely safe to merge.
+    #
+    # Majors are still tracked — Dependabot keeps the "ignored" entry visible in
+    # its dependency graph, and they are picked up deliberately as their own
+    # piece of work.
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
+
     groups:
-      # Group routine patch/minor bumps so the PR queue stays reviewable.
+      # Routine patch/minor bumps arrive as a single reviewable PR.
       dev-dependencies:
         dependency-type: development
         update-types:
-          - minor
-          - patch
-    labels:
-      - dependencies
+          - version-update:semver-minor
+          - version-update:semver-patch
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+
     commit-message:
       prefix: chore
       include: scope
@@ -28,6 +50,12 @@ updates:
     labels:
       - dependencies
       - ci
+    # Action majors often require workflow syntax changes (and Node runtime
+    # changes), so these are reviewed deliberately too.
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: chore
       include: scope
