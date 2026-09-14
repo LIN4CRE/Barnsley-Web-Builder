@@ -1,0 +1,12 @@
+# Barnsley Offline Business Directory
+# https://github.com/LIN4CRE/Barnsley-Web-Builder
+
+User-agent: *
+Allow: /
+
+# Nothing private is served, so no Disallow rules are needed.
+# The /api/ paths are not crawlable content but are harmless to allow;
+# they are excluded from the sitemap in any case.
+
+# PROJECT-SPECIFIC: replace with the live deployment origin.
+Sitemap: https://lin4cre.github.io/Barnsley-Web-Builder/sitemap.xml

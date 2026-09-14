@@ -1,0 +1,72 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one deployment at a time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for GitHub Pages
+        # VITE_BASE matches the /<repo-name>/ subpath Pages serves from.
+        run: npm run build:pages
+
+      - name: Add SPA 404 fallback
+        # GitHub Pages has no rewrite rules; serving index.html at 404.html lets
+        # deep links resolve to the app instead of the Pages error page.
+        run: cp dist/index.html dist/404.html
+
+      - name: Add a .nojekyll file
+        # Pages runs Jekyll by default, which ignores files and directories
+        # starting with an underscore.
+        run: touch dist/.nojekyll
+
+      - name: Verify the build output
+        run: |
+          test -f dist/index.html        || (echo "index.html missing" && exit 1)
+          test -f dist/404.html          || (echo "404.html missing" && exit 1)
+          test -f dist/robots.txt        || (echo "robots.txt missing" && exit 1)
+          test -f dist/sitemap.xml       || (echo "sitemap.xml missing" && exit 1)
+          test -f dist/og-image.png      || (echo "og-image.png missing" && exit 1)
+          echo "Build output verified."
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

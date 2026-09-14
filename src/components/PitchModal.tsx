@@ -1,286 +1,280 @@
-import React, { useState } from 'react';
-import {
-  X,
-  Sparkles,
-  Copy,
-  Check,
-  Phone,
-  Mail,
-  TrendingUp,
-  AlertTriangle,
-  Lightbulb,
-  Building2,
-  RefreshCw,
-} from 'lucide-react';
-import { BusinessItem, PitchProposal } from '../types';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Copy, Check, Mail, Phone, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import { Modal } from './Modal';
+import type { BusinessItem, PitchProposal } from '@/types';
 
 interface PitchModalProps {
   business: BusinessItem | null;
   pitch: PitchProposal | null;
   isLoading: boolean;
+  source: 'ai' | 'template' | null;
   onClose: () => void;
-  onRegenerate: (customNotes?: string) => void;
+  onRegenerate: (customNotes: string) => void;
 }
 
-export const PitchModal: React.FC<PitchModalProps> = ({
+type Tab = 'strategy' | 'email' | 'call';
+
+const TABS: readonly { id: Tab; label: string }[] = [
+  { id: 'strategy', label: 'Strategy' },
+  { id: 'email', label: 'Email' },
+  { id: 'call', label: 'Phone script' },
+];
+
+export function PitchModal({
   business,
   pitch,
   isLoading,
+  source,
   onClose,
   onRegenerate,
-}) => {
-  const [activeTab, setActiveTab] = useState<'strategy' | 'email' | 'call'>('strategy');
+}: PitchModalProps) {
+  const [activeTab, setActiveTab] = useState<Tab>('strategy');
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedCall, setCopiedCall] = useState(false);
   const [notes, setNotes] = useState('');
 
+  const baseId = useId();
+  const copyTimer = useRef<number | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) window.clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
+  const isOpen = business !== null;
+
+  // Reset to the strategy tab whenever a different business is opened.
+  useEffect(() => {
+    if (business) setActiveTab('strategy');
+  }, [business?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const copy = async (text: string, kind: 'email' | 'call') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (kind === 'email') setCopiedEmail(true);
+      else setCopiedCall(true);
+
+      if (copyTimer.current) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => {
+        setCopiedEmail(false);
+        setCopiedCall(false);
+      }, 2000);
+    } catch {
+      window.alert('Your browser blocked clipboard access. You can select the text and copy it manually.');
+    }
+  };
+
   if (!business) return null;
 
-  const handleCopyEmail = () => {
-    if (pitch?.coldOutreachEmail) {
-      navigator.clipboard.writeText(pitch.coldOutreachEmail);
-      setCopiedEmail(true);
-      setTimeout(() => setCopiedEmail(false), 2000);
-    }
-  };
-
-  const handleCopyCall = () => {
-    if (pitch?.phoneCallScript) {
-      navigator.clipboard.writeText(pitch.phoneCallScript);
-      setCopiedCall(true);
-      setTimeout(() => setCopiedCall(false), 2000);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
-        <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-4 bg-slate-50">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
-                AI Web Pitch & Outreach Pack
-              </span>
-              <span>•</span>
-              <span>{business.area}, Barnsley</span>
-            </div>
-            <h2 className="text-xl font-bold text-slate-900 mt-1 font-display">
-              {business.name}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {business.rating}★ ({business.reviewsCount} reviews) • Direct phone: {business.phone}
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-200 px-5 bg-white text-xs font-semibold gap-4">
-          <button
-            onClick={() => setActiveTab('strategy')}
-            className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'strategy'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Lightbulb className="w-3.5 h-3.5" />
-            <span>Opportunity & Strategy</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('email')}
-            className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'email'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Cold Outreach Email</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('call')}
-            className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'call'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Phone className="w-3.5 h-3.5" />
-            <span>60-Sec Phone Script</span>
-          </button>
-        </div>
-
-        {/* Content Area */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1 text-sm text-slate-700">
-          {isLoading ? (
-            <div className="py-16 text-center space-y-3">
-              <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="font-semibold text-slate-800">
-                Generating tailored digital proposal for {business.name}...
-              </p>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Analyzing Barnsley local market dynamics, missed revenue opportunities, and high-conversion outreach copy.
-              </p>
-            </div>
-          ) : pitch ? (
-            <>
-              {activeTab === 'strategy' && (
-                <div className="space-y-4">
-                  {/* Headline */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 text-white shadow-xs">
-                    <span className="text-[10px] font-bold tracking-wider uppercase text-amber-400">
-                      Core Value Proposition
-                    </span>
-                    <h3 className="text-base font-bold mt-1 text-white leading-snug">
-                      "{pitch.headline}"
-                    </h3>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="text-xs leading-relaxed text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <strong className="text-slate-900 block font-semibold mb-1">
-                      Executive Diagnosis:
-                    </strong>
-                    {pitch.executiveSummary}
-                  </div>
-
-                  {/* Opportunities lost vs Solutions */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="p-3.5 rounded-xl bg-rose-50/70 border border-rose-100 text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-rose-900 mb-2">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>Current Revenue Leaks</span>
-                      </div>
-                      <ul className="space-y-1.5 text-rose-950/90 list-disc list-inside">
-                        {pitch.lostOpportunities.map((item, idx) => (
-                          <li key={idx} className="leading-tight">
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100 text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-2">
-                        <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Recommended Digital Solutions</span>
-                      </div>
-                      <ul className="space-y-1.5 text-emerald-950/90 list-disc list-inside">
-                        {pitch.recommendedSolutions.map((item, idx) => (
-                          <li key={idx} className="leading-tight">
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Projected ROI */}
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs">
-                    <div>
-                      <span className="text-amber-800 font-semibold block">
-                        Estimated 90-Day Impact:
-                      </span>
-                      <span className="text-amber-950 font-bold">{pitch.projectedRoi}</span>
-                    </div>
-                    <span className="px-2.5 py-1 rounded bg-amber-100 text-amber-900 font-bold shrink-0">
-                      High Conv. Pitch
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'email' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">
-                      Tailored Cold Outreach Email (Barnsley Tone)
-                    </span>
-                    <button
-                      onClick={handleCopyEmail}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors"
-                    >
-                      {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedEmail ? 'Copied to Clipboard' : 'Copy Email'}</span>
-                    </button>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed select-all">
-                    {pitch.coldOutreachEmail}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'call' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">
-                      60-Second Direct Phone Call Script
-                    </span>
-                    <button
-                      onClick={handleCopyCall}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors"
-                    >
-                      {copiedCall ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedCall ? 'Copied Script' : 'Copy Script'}</span>
-                    </button>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap leading-relaxed select-all">
-                    {pitch.phoneCallScript}
-                  </div>
-
-                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
-                    <strong>Direct Call Tip:</strong> Call outside rush hours (e.g. 10:30am - 11:30am or 2:30pm - 3:30pm). Mention that you are local to South Yorkshire and saw their exceptional reviews.
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="py-10 text-center text-slate-500 text-sm">
-              Click below to generate an AI proposal for this business.
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer with Regeneration input */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
-          <div className="flex-1">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={business.name}
+      description={`${business.area}, Barnsley • ${business.rating}★ (${business.reviewsCount} reviews) • ${business.phone}`}
+      className="max-w-2xl"
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <label htmlFor={`${baseId}-notes`} className="sr-only">
+              Add context to tailor the proposal
+            </label>
             <input
+              id={`${baseId}-notes`}
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add custom angle (e.g. focus on Click & Collect or £250/mo retainer)..."
-              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              placeholder="Optional: add context (e.g. 'spoke to the owner, they want online booking')"
+              className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-600"
             />
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
             <button
+              type="button"
               onClick={() => onRegenerate(notes)}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50 cursor-pointer shrink-0"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>{isLoading ? 'Refining...' : 'Regenerate / Refine Pitch'}</span>
-            </button>
-            <button
-              onClick={onClose}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium transition-colors cursor-pointer"
-            >
-              Close
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <span>Regenerate</span>
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      }
+    >
+      {/* Provenance banner — never present template output as AI output. */}
+      {source === 'template' && !isLoading && (
+        <div className="mx-5 mt-5 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+          <strong className="font-semibold">Offline template.</strong> No AI service was reachable,
+          so this proposal was generated locally from the directory record. It contains no invented
+          facts or figures — fill in the bracketed placeholders before sending.
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="p-12 text-center" role="status" aria-live="polite">
+          <div
+            className="w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto"
+            aria-hidden="true"
+          />
+          <p className="mt-3 text-sm font-semibold text-slate-800">
+            Preparing the outreach proposal…
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Building the summary, email and call script for {business.name}.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="px-5 border-b border-slate-200 bg-white">
+            <div role="tablist" aria-label="Proposal sections" className="flex gap-4 text-xs font-semibold">
+              {TABS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`${baseId}-tab-${id}`}
+                  aria-selected={activeTab === id}
+                  aria-controls={`${baseId}-panel-${id}`}
+                  onClick={() => setActiveTab(id)}
+                  className={`py-3 border-b-2 transition-colors cursor-pointer ${
+                    activeTab === id
+                      ? 'border-slate-900 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-5">
+            {activeTab === 'strategy' && pitch && (
+              <div
+                role="tabpanel"
+                id={`${baseId}-panel-strategy`}
+                aria-labelledby={`${baseId}-tab-strategy`}
+                className="space-y-4"
+              >
+                <h3 className="text-base font-bold text-slate-900 font-display">{pitch.headline}</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">{pitch.executiveSummary}</p>
+
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                    Where enquiries are being lost
+                  </h4>
+                  <ul className="space-y-1.5 list-disc pl-5 text-sm text-slate-700">
+                    {pitch.lostOpportunities.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                    What to propose
+                  </h4>
+                  <ul className="space-y-1.5 list-disc pl-5 text-sm text-slate-700">
+                    {pitch.recommendedSolutions.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
+                    Projected return
+                  </h4>
+                  <p className="text-sm text-slate-700">{pitch.projectedRoi}</p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'email' && pitch && (
+              <div
+                role="tabpanel"
+                id={`${baseId}-panel-email`}
+                aria-labelledby={`${baseId}-tab-email`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" aria-hidden="true" />
+                    Cold outreach email
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => void copy(pitch.coldOutreachEmail, 'email')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {copiedEmail ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-4 leading-relaxed">
+                  {pitch.coldOutreachEmail}
+                </pre>
+              </div>
+            )}
+
+            {activeTab === 'call' && pitch && (
+              <div
+                role="tabpanel"
+                id={`${baseId}-panel-call`}
+                aria-labelledby={`${baseId}-tab-call`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+                    Phone script
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => void copy(pitch.phoneCallScript, 'call')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {copiedCall ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-4 leading-relaxed">
+                  {pitch.phoneCallScript}
+                </pre>
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Calling a business owner out of the blue? Keep it short, and check the
+                  Telephone Preference Service rules before running a calling campaign.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {source === 'ai' && !isLoading && (
+        <p className="px-5 pb-5 text-[11px] text-slate-500 flex items-center gap-1.5">
+          <Sparkles className="w-3 h-3" aria-hidden="true" />
+          Generated by Gemini. Check the figures before you send them to anyone.
+        </p>
+      )}
+    </Modal>
   );
-};
+}

@@ -1,4 +1,4 @@
-import { BusinessItem } from '../types';
+import type { BusinessItem } from '../types';
 
 export const BARNSLEY_BUSINESSES: BusinessItem[] = [
   {

@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Search, Sparkles } from 'lucide-react';
+
 import { Header } from './components/Header';
 import { MetricsBar } from './components/MetricsBar';
+import { MarketAnalyticsCharts } from './components/MarketAnalyticsCharts';
 import { FilterBar } from './components/FilterBar';
 import { BusinessCard } from './components/BusinessCard';
 import { BusinessTableView } from './components/BusinessTableView';
@@ -13,496 +16,353 @@ import { PitchModal } from './components/PitchModal';
 import { AiScannerModal } from './components/AiScannerModal';
 import { AddBusinessModal } from './components/AddBusinessModal';
 import { DeepResearchModal } from './components/DeepResearchModal';
-import { MarketAnalyticsCharts } from './components/MarketAnalyticsCharts';
 import { BulkActionsToolbar } from './components/BulkActionsToolbar';
-import { BulkPitchModal } from './components/BulkPitchModal';
-import { BARNSLEY_BUSINESSES } from './data/businesses';
-import { BusinessCategory, BusinessItem, FilterOptions, PitchProposal, OutreachStatus } from './types';
-import {
-  Building,
-  Sparkles,
-  Search,
-  Filter,
-  CheckCircle2,
-  Info,
-  MapPin,
-  HelpCircle,
-  ExternalLink,
-} from 'lucide-react';
+import { LiveRegion } from './components/Modal';
 
-const loadStoredStatuses = (): Record<string, OutreachStatus> => {
-  try {
-    const raw = localStorage.getItem('barnsley_business_statuses');
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-};
+import { useBusinesses } from './hooks/useBusinesses';
+import { generatePitch, isBackendAvailable, resetBackendProbe } from './lib/api';
+import { DEFAULT_FILTERS, STORAGE_KEYS } from './lib/constants';
+import { downloadTextFile, timestampedFilename, toCsv } from './lib/csv';
+import { collectAreas, collectCategories, computeMetrics, filterBusinesses, hasActiveFilters } from './lib/filters';
+import { loadValue, saveValue } from './lib/storage';
+import type { BusinessItem, FilterOptions, OutreachStatus, PitchProposal } from './types';
 
-const loadStoredNotes = (id: string): string => {
-  try {
-    return localStorage.getItem(`barnsley_notes_${id}`) || '';
-  } catch {
-    return '';
-  }
-};
+const BulkPitchModal = lazy(() =>
+  import('./components/BulkPitchModal').then((m) => ({ default: m.BulkPitchModal })),
+);
+
+const CSV_HEADERS = [
+  'Business Name',
+  'Sector',
+  'Outreach Stage',
+  'Area',
+  'Full Address',
+  'Postcode',
+  'Telephone',
+  'Rating',
+  'Reviews Count',
+  'Status Tag',
+  'Current Presence',
+  'Opportunity Score (1-100)',
+  'Recommended Package',
+  'Estimated Missed Monthly Revenue',
+  'Private Notes',
+  'Proof of Success',
+  'Why No Website',
+  'Pitch Opportunity Angle',
+] as const;
+
+type ViewMode = 'grid' | 'table';
 
 export default function App() {
-  const [businesses, setBusinesses] = useState<BusinessItem[]>(() => {
-    const stored = loadStoredStatuses();
-    return BARNSLEY_BUSINESSES.map((b) => ({
-      ...b,
-      status: stored[b.id] || b.status || 'Not Contacted',
-      notes: loadStoredNotes(b.id) || b.notes || '',
-    }));
-  });
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const {
+    businesses,
+    dataSource,
+    addBusinesses,
+    updateStatus,
+    bulkUpdateStatus,
+    updateNote,
+    customCount,
+  } = useBusinesses();
 
-  // Filter state
-  const [filters, setFilters] = useState<FilterOptions>({
-    searchTerm: '',
-    category: 'All',
-    area: 'All',
-    minRating: 0,
-    minOpportunityScore: 0,
-    onlinePresence: 'All',
-    outreachStatus: 'All',
-    sortBy: 'score_desc',
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => loadValue<ViewMode>(STORAGE_KEYS.viewMode, 'grid'),
+  );
 
-  // Bulk Selection state
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isBulkPitchOpen, setIsBulkPitchOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
 
-  // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [activeBusinessForPitch, setActiveBusinessForPitch] = useState<BusinessItem | null>(null);
+  const [isBulkPitchOpen, setIsBulkPitchOpen] = useState(false);
+
+  const [activePitchBusiness, setActivePitchBusiness] = useState<BusinessItem | null>(null);
   const [currentPitch, setCurrentPitch] = useState<PitchProposal | null>(null);
   const [isPitchLoading, setIsPitchLoading] = useState(false);
+  const [pitchSource, setPitchSource] = useState<'ai' | 'template' | null>(null);
 
-  // Deep Research & Website Prompt Modal state
-  const [activeBusinessForResearch, setActiveBusinessForResearch] = useState<BusinessItem | null>(null);
-  const [isResearchModalOpen, setIsResearchModalOpen] = useState(false);
+  const [activeResearchBusiness, setActiveResearchBusiness] = useState<BusinessItem | null>(null);
+  const [isResearchOpen, setIsResearchOpen] = useState(false);
 
-  const handleOpenDeepResearch = (business: BusinessItem) => {
-    setActiveBusinessForResearch(business);
-    setIsResearchModalOpen(true);
-  };
+  const [announcement, setAnnouncement] = useState('');
+  const [backendUnavailable, setBackendUnavailable] = useState(false);
 
-  // Fetch initial businesses from server if reachable
+  /* ---- Backend availability is only known after the first request settles ---- */
   useEffect(() => {
-    fetch('/api/businesses')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          const stored = loadStoredStatuses();
-          setBusinesses(
-            data.data.map((b: BusinessItem) => ({
-              ...b,
-              status: stored[b.id] || b.status || 'Not Contacted',
-              notes: loadStoredNotes(b.id) || b.notes || '',
-            }))
-          );
-        }
-      })
-      .catch(() => {
-        // Fallback to static verified BARNSLEY_BUSINESSES
-      });
+    if (dataSource !== 'loading') {
+      setBackendUnavailable(isBackendAvailable() === false);
+    }
+  }, [dataSource]);
+
+  useEffect(() => {
+    resetBackendProbe();
   }, []);
 
-  // Selection handlers
-  const handleToggleSelect = (id: string) => {
+  useEffect(() => {
+    saveValue(STORAGE_KEYS.viewMode, viewMode);
+  }, [viewMode]);
+
+  /* ---------------------------- Derived data ---------------------------- */
+
+  const categories = useMemo(() => collectCategories(businesses), [businesses]);
+  const areas = useMemo(() => collectAreas(businesses), [businesses]);
+  const metrics = useMemo(() => computeMetrics(businesses), [businesses]);
+  const filtered = useMemo(() => filterBusinesses(businesses, filters), [businesses, filters]);
+  const filtersActive = useMemo(() => hasActiveFilters(filters, DEFAULT_FILTERS), [filters]);
+
+  const selectedBusinesses = useMemo(
+    () => businesses.filter((b) => selectedIds.includes(b.id)),
+    [businesses, selectedIds],
+  );
+
+  /* ------------------------------ Handlers ------------------------------ */
+
+  const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
-  };
+  }, []);
 
-  const handleSelectAll = () => {
-    setSelectedIds(filteredBusinesses.map((b) => b.id));
-  };
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(filtered.map((b) => b.id));
+    setAnnouncement(`Selected all ${filtered.length} businesses.`);
+  }, [filtered]);
 
-  const handleClearSelection = () => {
+  const handleClearSelection = useCallback(() => {
     setSelectedIds([]);
-  };
+    setAnnouncement('Selection cleared.');
+  }, []);
 
-  // Outreach Status Handlers
-  const handleStatusChange = (id: string, newStatus: OutreachStatus) => {
-    setBusinesses((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b))
-    );
-    try {
-      const stored = loadStoredStatuses();
-      stored[id] = newStatus;
-      localStorage.setItem('barnsley_business_statuses', JSON.stringify(stored));
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const handleStatusChange = useCallback(
+    (id: string, status: OutreachStatus) => updateStatus(id, status),
+    [updateStatus],
+  );
 
-  const handleBulkStatusChange = (newStatus: OutreachStatus) => {
-    if (selectedIds.length === 0) return;
-    setBusinesses((prev) =>
-      prev.map((b) => (selectedIds.includes(b.id) ? { ...b, status: newStatus } : b))
-    );
-    try {
-      const stored = loadStoredStatuses();
-      selectedIds.forEach((id) => {
-        stored[id] = newStatus;
-      });
-      localStorage.setItem('barnsley_business_statuses', JSON.stringify(stored));
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const handleBulkStatusChange = useCallback(
+    (status: OutreachStatus) => {
+      bulkUpdateStatus(selectedIds, status);
+      setAnnouncement(`Set ${selectedIds.length} businesses to ${status}.`);
+    },
+    [bulkUpdateStatus, selectedIds],
+  );
 
-  const handleNoteSave = (id: string, note: string) => {
-    setBusinesses((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, notes: note } : b))
-    );
-  };
+  const handleNoteSave = useCallback(
+    (id: string, note: string) => updateNote(id, note),
+    [updateNote],
+  );
 
-  // Unique categories and areas for filters
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    businesses.forEach((b) => set.add(b.category));
-    return Array.from(set).sort();
-  }, [businesses]);
+  const handleFilterChange = useCallback((updated: Partial<FilterOptions>) => {
+    setFilters((prev) => ({ ...prev, ...updated }));
+  }, []);
 
-  const areas = useMemo(() => {
-    const set = new Set<string>();
-    businesses.forEach((b) => set.add(b.area));
-    return Array.from(set).sort();
-  }, [businesses]);
+  const handleResetFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setAnnouncement('Filters cleared.');
+  }, []);
 
-  // Filter & Sort logic
-  const filteredBusinesses = useMemo(() => {
-    let result = [...businesses];
+  /* ------------------------------- Export ------------------------------- */
 
-    // Search query
-    if (filters.searchTerm.trim()) {
-      const q = filters.searchTerm.toLowerCase().trim();
-      result = result.filter(
-        (b) =>
-          b.name.toLowerCase().includes(q) ||
-          b.area.toLowerCase().includes(q) ||
-          b.fullAddress.toLowerCase().includes(q) ||
-          b.postcode.toLowerCase().includes(q) ||
-          b.primaryServices.some((s) => s.toLowerCase().includes(q)) ||
-          b.opportunityAngle.toLowerCase().includes(q) ||
-          b.successProof.toLowerCase().includes(q)
-      );
-    }
+  const handleExportCsv = useCallback(
+    (onlySelected: boolean) => {
+      const target = onlySelected && selectedIds.length > 0 ? selectedBusinesses : filtered;
 
-    // Category
-    if (filters.category !== 'All') {
-      result = result.filter((b) => b.category === filters.category);
-    }
-
-    // Area
-    if (filters.area !== 'All') {
-      result = result.filter((b) => b.area === filters.area);
-    }
-
-    // Online presence type
-    if (filters.onlinePresence !== 'All') {
-      result = result.filter((b) => b.onlinePresence === filters.onlinePresence);
-    }
-
-    // Outreach Status filter
-    if (filters.outreachStatus && filters.outreachStatus !== 'All') {
-      result = result.filter(
-        (b) => (b.status || 'Not Contacted') === filters.outreachStatus
-      );
-    }
-
-    // Rating
-    if (filters.minRating > 0) {
-      result = result.filter((b) => b.rating >= filters.minRating);
-    }
-
-    // Sorting
-    result.sort((a, b) => {
-      switch (filters.sortBy) {
-        case 'score_desc':
-          return b.opportunityScore - a.opportunityScore;
-        case 'rating_desc':
-          return b.rating !== a.rating ? b.rating - a.rating : b.reviewsCount - a.reviewsCount;
-        case 'reviews_desc':
-          return b.reviewsCount - a.reviewsCount;
-        case 'name_asc':
-          return a.name.localeCompare(b.name);
-        default:
-          return 0;
+      if (target.length === 0) {
+        setAnnouncement('Nothing to export.');
+        return;
       }
-    });
 
-    return result;
-  }, [businesses, filters]);
+      const rows = target.map((b) => [
+        b.name,
+        b.category,
+        b.status ?? 'Not Contacted',
+        b.area,
+        b.fullAddress,
+        b.postcode,
+        b.phone,
+        b.rating,
+        b.reviewsCount,
+        b.statusTag,
+        b.onlinePresence,
+        b.opportunityScore,
+        b.recommendedPackage,
+        b.estimatedLostRevenuePerMonth ?? '',
+        b.notes ?? '',
+        b.successProof,
+        b.whyNoWebsite,
+        b.opportunityAngle,
+      ]);
 
-  // Handle Pitch generation
-  const handleOpenPitch = async (business: BusinessItem, customNotes?: string) => {
-    setActiveBusinessForPitch(business);
-    setIsPitchLoading(true);
-    setCurrentPitch(null);
+      const csv = toCsv(CSV_HEADERS, rows);
+      const filename = onlySelected
+        ? timestampedFilename(`barnsley_selected_${target.length}_businesses`, 'csv')
+        : timestampedFilename('barnsley_offline_businesses_prospects', 'csv');
 
-    try {
-      const res = await fetch('/api/generate-pitch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessId: business.id,
-          customNotes: customNotes || '',
-        }),
-      });
+      downloadTextFile(filename, csv, 'text/csv');
+      setAnnouncement(`Exported ${target.length} businesses to CSV.`);
+    },
+    [filtered, selectedBusinesses, selectedIds],
+  );
 
-      const data = await res.json();
-      if (data.success && data.pitch) {
-        setCurrentPitch(data.pitch);
-      } else {
-        // Fallback structured proposal
-        setCurrentPitch({
-          businessId: business.id,
-          businessName: business.name,
-          headline: `Capture After-Hours Inquiries & Eliminate Friction for ${business.name}`,
-          executiveSummary: `${business.name} has built extraordinary goodwill across Barnsley with an outstanding ${business.rating}★ rating. A focused, modern web presence unlocks after-hours booking and eliminates manual phone tag without disrupting daily trade operations.`,
-          lostOpportunities: [
-            'Missed customer inquiries after business hours when phones go unanswered',
-            'Commuters and out-of-town newcomers in South Yorkshire finding competitors on Google Maps',
-            'Manual phone/text tag while serving counter or trade customers during rush periods',
-          ],
-          recommendedSolutions: [
-            business.recommendedPackage,
-            'Fast, mobile-friendly landing page with 1-click WhatsApp/Call button and location map',
-            'Automated Google review collector & high-resolution project/product portfolio',
-          ],
-          coldOutreachEmail: `Hi ${business.name} team,
+  /* -------------------------------- Pitch -------------------------------- */
 
-I live locally in South Yorkshire and was recently admiring your phenomenal ${business.rating}-star reputation in ${business.area}.
+  const handleOpenPitch = useCallback(
+    async (business: BusinessItem, customNotes = '') => {
+      setActivePitchBusiness(business);
+      setIsPitchLoading(true);
+      setCurrentPitch(null);
 
-I noticed you don't currently have an official website, and your customers are either having to ring during busy hours or message on Facebook.
+      const result = await generatePitch(business, customNotes);
 
-I put together a quick, non-obligation preview of what an automated booking and showcase portal for ${business.name} could look like — helping you capture more bookings while saving you hours on the phone.
-
-Would you be open to taking a 3-minute look at the preview this week?
-
-Best regards,
-Local Digital Specialist`,
-          phoneCallScript: `"Hi there, is the owner or manager around?
-...
-Hi! I'll keep this under 45 seconds because I know you're busy running things. My name is [Your Name], I'm based here in South Yorkshire. I was looking through Barnsley's top-rated ${business.category.toLowerCase()} and noticed you have over ${business.reviewsCount} 5-star reviews, which is incredible.
-
-I saw you don't have a dedicated website yet and handle everything by phone. We just built a prototype demo for ${business.name} that could save you hours of phone tag each week. I'd love to just send you the link to look at on your phone whenever you get a break. What's the best email or number to send that to?"`,
-          projectedRoi: `Estimated £2,500 - £4,500/mo in captured after-hours bookings and 6-8 hours saved per week in telephone interruptions.`,
-        });
-      }
-    } catch {
-      // Fallback
-      setCurrentPitch({
-        businessId: business.id,
-        businessName: business.name,
-        headline: `Transform Offline Goodwill into 24/7 Bookings for ${business.name}`,
-        executiveSummary: `Leverage ${business.name}'s decades-strong local reputation in Barnsley into an automated online booking and customer funnel.`,
-        lostOpportunities: [
-          'Uncaptured search traffic from mobile users in Barnsley searching for services after 6 PM',
-          'Missed repeat reminders for seasonal maintenance, orders, or appointments',
-          'Dependence on third-party algorithms or directory scrapers',
-        ],
-        recommendedSolutions: [
-          business.recommendedPackage,
-          'Direct appointment / inquiry engine with zero commissions',
-          'Local South Yorkshire SEO optimization',
-        ],
-        coldOutreachEmail: `Hi ${business.name},\n\nI noticed your stellar reviews across Barnsley. You're losing dozens of after-hours inquiries each week without a website. Would love to show you a 3-minute prototype to help.\n\nBest,\nLocal Specialist`,
-        phoneCallScript: `"Hi, calling quickly because I love your work in Barnsley. We built a 3-minute web preview for ${business.name} to save you phone time. Where can I send the link?"`,
-        projectedRoi: 'Save 5+ hours of phone coordination weekly and capture after-hours clients.',
-      });
-    } finally {
       setIsPitchLoading(false);
-    }
-  };
+      setCurrentPitch(result.data);
+      setPitchSource(result.source);
+      setBackendUnavailable(result.source === 'template');
+    },
+    [],
+  );
 
-  // Export CSV functionality (supports all filtered or only selected)
-  const handleExportCsv = (onlySelected = false) => {
-    const targetList =
-      onlySelected && selectedIds.length > 0
-        ? businesses.filter((b) => selectedIds.includes(b.id))
-        : filteredBusinesses;
+  /* ------------------------------ Research ------------------------------- */
 
-    const headers = [
-      'Business Name',
-      'Sector',
-      'Outreach Status',
-      'Area',
-      'Full Address',
-      'Postcode',
-      'Telephone',
-      'Rating',
-      'Reviews Count',
-      'Status Tag',
-      'Current Presence',
-      'Opportunity Score (1-100)',
-      'Recommended Web Package',
-      'Estimated Missed Monthly Revenue',
-      'Private Notes',
-      'Proof of Success',
-      'Why No Website',
-      'Pitch Opportunity Angle',
-    ];
+  const handleOpenResearch = useCallback((business: BusinessItem) => {
+    setActiveResearchBusiness(business);
+    setIsResearchOpen(true);
+  }, []);
 
-    const rows = targetList.map((b) => [
-      `"${b.name.replace(/"/g, '""')}"`,
-      `"${b.category}"`,
-      `"${b.status || 'Not Contacted'}"`,
-      `"${b.area}"`,
-      `"${b.fullAddress.replace(/"/g, '""')}"`,
-      `"${b.postcode}"`,
-      `"${b.phone}"`,
-      b.rating,
-      b.reviewsCount,
-      `"${b.statusTag}"`,
-      `"${b.onlinePresence}"`,
-      b.opportunityScore,
-      `"${b.recommendedPackage.replace(/"/g, '""')}"`,
-      `"${(b.estimatedLostRevenuePerMonth || '').replace(/"/g, '""')}"`,
-      `"${(b.notes || loadStoredNotes(b.id)).replace(/"/g, '""')}"`,
-      `"${b.successProof.replace(/"/g, '""')}"`,
-      `"${b.whyNoWebsite.replace(/"/g, '""')}"`,
-      `"${b.opportunityAngle.replace(/"/g, '""')}"`,
-    ]);
+  /* ------------------------------- Adding -------------------------------- */
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    const filename = onlySelected
-      ? `Barnsley_Selected_${targetList.length}_Businesses_${new Date().toISOString().slice(0, 10)}.csv`
-      : `Barnsley_Offline_Businesses_Prospects_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const handleAddBusinesses = useCallback(
+    (items: readonly BusinessItem[]) => {
+      const added = addBusinesses(items);
+      setAnnouncement(
+        added === 0
+          ? 'Those businesses are already in the directory.'
+          : `${added} business${added === 1 ? '' : 'es'} added.`,
+      );
+      return added;
+    },
+    [addBusinesses],
+  );
 
-  const handleAddBusinesses = (newItems: BusinessItem[]) => {
-    setBusinesses((prev) => {
-      const existingIds = new Set(prev.map((b) => b.id));
-      const filtered = newItems.filter((item) => !existingIds.has(item.id));
-      return [...filtered, ...prev];
-    });
-  };
-
-  const selectedBusinessesList = useMemo(() => {
-    return businesses.filter((b) => selectedIds.includes(b.id));
-  }, [businesses, selectedIds]);
+  /* -------------------------------- Render ------------------------------- */
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-20">
-      {/* Top Header */}
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-24">
+      <LiveRegion message={announcement} />
+
       <Header
         totalCount={businesses.length}
+        customCount={customCount}
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onExportCsv={() => handleExportCsv(false)}
+        backendUnavailable={backendUnavailable}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Barnsley Context Banner */}
-        <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 mb-6 shadow-sm relative overflow-hidden">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 outline-none"
+      >
+        {/* Context banner */}
+        <section
+          aria-labelledby="context-heading"
+          className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 mb-6 shadow-sm relative overflow-hidden"
+        >
           <div className="relative z-10 max-w-3xl space-y-2">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>South Yorkshire Local Market Intelligence</span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-display">
-              High-Performing Barnsley Businesses Operating Entirely Offline
+            <p className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-200 text-xs font-semibold m-0">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" aria-hidden="true" />
+              South Yorkshire local market research
+            </p>
+
+            <h2
+              id="context-heading"
+              className="text-xl sm:text-2xl font-bold tracking-tight text-white font-display"
+            >
+              Established Barnsley businesses trading entirely offline
             </h2>
-            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-              In Barnsley and surrounding South Yorkshire districts, many of the most reputable butcher shops, MOT garages, tradespeople, and Victorian Arcade boutiques thrive purely on generational word-of-mouth, physical market queues, or Facebook posts. While their diaries are full, they are missing out on after-hours bookings, automated scheduling, and younger online customers.
+
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed m-0">
+              Across Barnsley and the surrounding South Yorkshire districts, plenty of
+              well-regarded butchers, garages, tradespeople and market traders still run on
+              word-of-mouth, footfall and a Facebook page. Their diaries are full — but they
+              miss after-hours enquiries, and younger customers who search before they buy
+              never find them.
             </p>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-slate-800 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-400">
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              Verified high review ratings (4.7★ – 5.0★)
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              Direct phone & address records included
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              Tailored web value propositions ready to pitch
-            </span>
-          </div>
-        </div>
+          <ul className="relative mt-4 pt-4 border-t border-slate-800 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-400 list-none p-0">
+            {[
+              'Public review ratings recorded for every entry',
+              'Direct phone and address details where available',
+              'Outreach stage and private notes tracked locally',
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-1.5 text-slate-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
 
-        {/* Metrics Overview */}
-        <MetricsBar businesses={businesses} />
+        <MetricsBar metrics={metrics} />
 
-        {/* Recharts Market Potential Analytics & Pipeline Visualizer */}
         <MarketAnalyticsCharts businesses={businesses} />
 
-        {/* Filters and search */}
         <FilterBar
           filters={filters}
-          onChange={(updated) => setFilters((prev) => ({ ...prev, ...updated }))}
-          onReset={() =>
-            setFilters({
-              searchTerm: '',
-              category: 'All',
-              area: 'All',
-              minRating: 0,
-              minOpportunityScore: 0,
-              onlinePresence: 'All',
-              outreachStatus: 'All',
-              sortBy: 'score_desc',
-            })
-          }
+          onChange={handleFilterChange}
+          onReset={handleResetFilters}
           categories={categories}
           areas={areas}
           viewMode={viewMode}
           setViewMode={setViewMode}
-          resultsCount={filteredBusinesses.length}
+          resultsCount={filtered.length}
+          hasActiveFilters={filtersActive}
         />
 
-        {/* Listings Display */}
-        {filteredBusinesses.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center my-8 shadow-2xs space-y-3">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+            <div
+              className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400"
+              aria-hidden="true"
+            >
               <Search className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-slate-800">
-              No matching Barnsley businesses found
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Try relaxing your search terms or filters, or use the <strong>AI Niche Scanner</strong> to discover more candidates in specific Barnsley areas like Penistone, Wombwell, or Hoyland.
+
+            <h2 className="text-base font-bold text-slate-800 m-0">
+              {businesses.length === 0
+                ? 'Loading the directory…'
+                : 'No businesses match those filters'}
+            </h2>
+
+            <p className="text-sm text-slate-500 max-w-md mx-auto m-0">
+              {businesses.length === 0
+                ? 'Reading the bundled directory data.'
+                : 'Try widening your search, or add a business you already know about.'}
             </p>
-            <button
-              onClick={() =>
-                setFilters({
-                  searchTerm: '',
-                  category: 'All',
-                  area: 'All',
-                  minRating: 0,
-                  minOpportunityScore: 0,
-                  onlinePresence: 'All',
-                  outreachStatus: 'All',
-                  sortBy: 'score_desc',
-                })
-              }
-              className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              Reset Filters
-            </button>
+
+            {businesses.length > 0 && (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Reset filters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Add a business
+                </button>
+              </div>
+            )}
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
-            {filteredBusinesses.map((business) => (
+            {filtered.map((business) => (
               <BusinessCard
                 key={business.id}
                 business={business}
@@ -510,29 +370,74 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
                 onToggleSelect={handleToggleSelect}
                 onStatusChange={handleStatusChange}
                 onNoteSave={handleNoteSave}
-                onDeepResearch={handleOpenDeepResearch}
-                onGeneratePitch={(b) => handleOpenPitch(b)}
-                isGeneratingPitch={isPitchLoading && activeBusinessForPitch?.id === business.id}
+                onDeepResearch={handleOpenResearch}
+                onGeneratePitch={(b) => void handleOpenPitch(b)}
+                isGeneratingPitch={isPitchLoading && activePitchBusiness?.id === business.id}
               />
             ))}
           </div>
         ) : (
           <BusinessTableView
-            businesses={filteredBusinesses}
+            businesses={filtered}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onSelectAll={handleSelectAll}
             onStatusChange={handleStatusChange}
-            onDeepResearch={handleOpenDeepResearch}
-            onGeneratePitch={(b) => handleOpenPitch(b)}
+            onDeepResearch={handleOpenResearch}
+            onGeneratePitch={(b) => void handleOpenPitch(b)}
           />
         )}
       </main>
 
-      {/* Floating Bulk Actions Toolbar */}
+      {/* Footer */}
+      <footer className="border-t border-slate-200 bg-white py-6 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-3 text-xs text-slate-500">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p className="m-0">
+              <span className="font-semibold text-slate-700">
+                Barnsley Offline Businesses Directory
+              </span>{' '}
+              • Barnsley &amp; South Yorkshire
+            </p>
+
+            <nav aria-label="Footer links">
+              <ul className="flex items-center gap-3 list-none p-0 m-0">
+                <li>
+                  <a
+                    href="https://github.com/LIN4CRE/Barnsley-Web-Builder"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-700 hover:text-brand-800 font-medium"
+                  >
+                    Source &amp; docs
+                  </a>
+                </li>
+                <li aria-hidden="true">•</li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportCsv(false)}
+                    className="text-slate-700 hover:text-slate-900 font-medium cursor-pointer"
+                  >
+                    Export all CSV
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          </div>
+
+          <p className="m-0 text-[11px] leading-relaxed max-w-3xl">
+            Directory entries are research notes compiled from publicly available information.
+            Ratings and review counts are a snapshot taken when each entry was added and can
+            change. Check details directly with a business before contacting it. Outreach status
+            and notes are stored only in your browser.
+          </p>
+        </div>
+      </footer>
+
       <BulkActionsToolbar
         selectedCount={selectedIds.length}
-        totalCount={filteredBusinesses.length}
+        totalCount={filtered.length}
         onSelectAll={handleSelectAll}
         onClearSelection={handleClearSelection}
         onExportSelectedCsv={() => handleExportCsv(true)}
@@ -540,45 +445,18 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         onBulkStatusChange={handleBulkStatusChange}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <div>
-            <span className="font-semibold text-slate-700">Barnsley Offline Businesses Intelligence</span> • South Yorkshire Borough Directory
-          </div>
-          <div className="flex items-center gap-4">
-            <span>Powered by Google GenAI</span>
-            <span>•</span>
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
-            >
-              Scan Suburbs
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => handleExportCsv(false)}
-              className="text-slate-700 hover:text-slate-900 font-medium cursor-pointer"
-            >
-              Export All CSV
-            </button>
-          </div>
-        </div>
-      </footer>
-
       {/* Modals */}
       <PitchModal
-        business={activeBusinessForPitch}
+        business={activePitchBusiness}
         pitch={currentPitch}
         isLoading={isPitchLoading}
+        source={pitchSource}
         onClose={() => {
-          setActiveBusinessForPitch(null);
+          setActivePitchBusiness(null);
           setCurrentPitch(null);
         }}
         onRegenerate={(notes) => {
-          if (activeBusinessForPitch) {
-            handleOpenPitch(activeBusinessForPitch, notes);
-          }
+          if (activePitchBusiness) void handleOpenPitch(activePitchBusiness, notes);
         }}
       />
 
@@ -586,31 +464,35 @@ I saw you don't have a dedicated website yet and handle everything by phone. We 
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onAddBusinesses={handleAddBusinesses}
+        backendUnavailable={backendUnavailable}
       />
 
       <AddBusinessModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onAdd={(b) => handleAddBusinesses([b])}
-        categories={categories as BusinessCategory[]}
-      />
-
-      {/* Deep Research & Autonomous Website Prompt Modal */}
-      <DeepResearchModal
-        business={activeBusinessForResearch}
-        isOpen={isResearchModalOpen}
-        onClose={() => {
-          setIsResearchModalOpen(false);
-          setActiveBusinessForResearch(null);
+        onAdd={(b) => {
+          void handleAddBusinesses([b]);
         }}
       />
 
-      {/* Bulk Pitch Generation Modal */}
-      <BulkPitchModal
-        businesses={selectedBusinessesList}
-        isOpen={isBulkPitchOpen}
-        onClose={() => setIsBulkPitchOpen(false)}
+      <DeepResearchModal
+        business={activeResearchBusiness}
+        isOpen={isResearchOpen}
+        onClose={() => {
+          setIsResearchOpen(false);
+          setActiveResearchBusiness(null);
+        }}
       />
+
+      {isBulkPitchOpen && (
+        <Suspense fallback={null}>
+          <BulkPitchModal
+            businesses={selectedBusinesses}
+            isOpen={isBulkPitchOpen}
+            onClose={() => setIsBulkPitchOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

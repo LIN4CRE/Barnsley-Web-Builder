@@ -1,109 +1,120 @@
-import React from 'react';
-import { CheckSquare, Square, Download, Sparkles, X, ChevronDown, CheckCircle2 } from 'lucide-react';
-import { OutreachStatus } from '../types';
+import { CheckSquare, Download, Sparkles } from 'lucide-react';
+import { OUTREACH_STATUSES } from '@/types';
+import type { OutreachStatus } from '@/types';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
   totalCount: number;
-  onSelectAll: () => void;
   onClearSelection: () => void;
+  onSelectAll: () => void;
   onExportSelectedCsv: () => void;
   onOpenBulkPitch: () => void;
   onBulkStatusChange: (status: OutreachStatus) => void;
 }
 
-export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
+export function BulkActionsToolbar({
   selectedCount,
   totalCount,
-  onSelectAll,
   onClearSelection,
+  onSelectAll,
   onExportSelectedCsv,
   onOpenBulkPitch,
   onBulkStatusChange,
-}) => {
-  if (selectedCount === 0) {
-    return null;
-  }
+}: BulkActionsToolbarProps) {
+  if (selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] sm:w-auto">
-      <div className="bg-slate-900 text-white rounded-2xl p-3 sm:px-5 sm:py-3.5 shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+    // The toolbar is announced as a region so keyboard and screen-reader users
+    // are told it appeared, rather than it silently covering the bottom of the page.
+    <div
+      role="region"
+      aria-label="Bulk actions for selected businesses"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] sm:w-auto"
+    >
+      <div className="bg-slate-900 text-white rounded-2xl p-3 sm:px-5 sm:py-3.5 shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-indigo-600/30 text-indigo-300 px-2.5 py-1 rounded-lg text-xs font-bold border border-indigo-500/30">
-            <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+          <span
+            className="flex items-center gap-1.5 bg-indigo-600/30 text-indigo-200 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-indigo-500/30"
+            role="status"
+            aria-live="polite"
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-indigo-300" aria-hidden="true" />
             <span>
               {selectedCount} <span className="font-normal text-slate-300">of {totalCount} selected</span>
             </span>
-          </div>
+          </span>
 
           <button
+            type="button"
             onClick={onClearSelection}
-            className="text-slate-400 hover:text-white text-xs underline cursor-pointer"
+            className="text-slate-300 hover:text-white text-xs underline cursor-pointer px-1 py-1"
           >
             Clear
           </button>
           <button
+            type="button"
             onClick={onSelectAll}
-            className="text-slate-400 hover:text-white text-xs underline cursor-pointer hidden sm:inline"
+            className="text-slate-300 hover:text-white text-xs underline cursor-pointer hidden sm:inline px-1 py-1"
           >
-            Select All
+            Select all
           </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Status Batch Update Dropdown */}
           <div className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2 py-1 text-xs border border-slate-700">
-            <span className="text-[11px] text-slate-400">Set Status:</span>
+            <label htmlFor="bulk-status-select" className="text-[11px] text-slate-300">
+              Set stage
+            </label>
             <select
+              id="bulk-status-select"
+              defaultValue=""
               onChange={(e) => {
                 if (e.target.value) {
                   onBulkStatusChange(e.target.value as OutreachStatus);
                   e.target.value = '';
                 }
               }}
-              defaultValue=""
               className="bg-transparent text-white text-xs font-medium cursor-pointer focus:outline-none"
             >
               <option value="" disabled className="bg-slate-800 text-slate-400">
-                Choose...
+                Choose…
               </option>
-              <option value="Not Contacted" className="bg-slate-800 text-white">
-                Not Contacted
-              </option>
-              <option value="In Progress" className="bg-slate-800 text-white">
-                In Progress
-              </option>
-              <option value="Lead" className="bg-slate-800 text-white">
-                Lead
-              </option>
-              <option value="Closed" className="bg-slate-800 text-white">
-                Closed
-              </option>
+              {OUTREACH_STATUSES.map((s) => (
+                <option key={s} value={s} className="bg-slate-800 text-white">
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Export Selected to CSV */}
           <button
+            type="button"
             onClick={onExportSelectedCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
-            title="Export selected businesses to CSV spreadsheet"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5 text-slate-300" />
+            <Download className="w-3.5 h-3.5 text-slate-300" aria-hidden="true" />
             <span className="hidden sm:inline">Export CSV</span>
             <span className="sm:hidden">CSV</span>
           </button>
 
-          {/* Generate Multiple Pitch Documents at once */}
           <button
+            type="button"
             onClick={onOpenBulkPitch}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
-            title="Generate custom outreach pitches and scripts for all selected businesses"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Generate Pitch Deck ({selectedCount})</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" aria-hidden="true" />
+            <span>Outreach pack ({selectedCount})</span>
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onClearSelection}
+        className="sr-only focus:not-sr-only"
+      >
+        Clear selection
+      </button>
     </div>
   );
-};
+}

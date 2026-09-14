@@ -1,6 +1,0 @@
-{
-  "name": "Barnsley Offline Businesses Directory",
-  "description": "Comprehensive directory and prospecting tool for successful, high-reputation businesses in Barnsley and South Yorkshire that operate without a website.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
